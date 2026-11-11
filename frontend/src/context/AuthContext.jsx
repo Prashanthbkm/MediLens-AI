@@ -1,4 +1,3 @@
-
 import {
   createContext,
   useContext,
@@ -62,7 +61,7 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  // Login
+  // Login with Email/Password
   const login = async (email, password) => {
     const response = await loginRequest(email, password);
 
@@ -72,6 +71,27 @@ export function AuthProvider({ children }) {
 
     localStorage.setItem(TOKEN_KEY, response.accessToken);
     setToken(response.accessToken);
+
+    try {
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
+      return currentUser;
+    } catch (error) {
+      localStorage.removeItem(TOKEN_KEY);
+      setToken(null);
+      setUser(null);
+      throw error;
+    }
+  };
+
+  // Login with OAuth Token (Google)
+  const loginWithToken = async (oauthToken) => {
+    if (!oauthToken) {
+      throw new Error("OAuth token is missing.");
+    }
+
+    localStorage.setItem(TOKEN_KEY, oauthToken);
+    setToken(oauthToken);
 
     try {
       const currentUser = await getCurrentUser();
@@ -110,6 +130,7 @@ export function AuthProvider({ children }) {
     loading,
     isAuthenticated: Boolean(token && user),
     login,
+    loginWithToken,
     register,
     logout,
     refreshUser,

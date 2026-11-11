@@ -1,4 +1,3 @@
-
 package com.medilens.backend.config;
 
 import java.util.List;
@@ -21,91 +20,57 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
 
     public SecurityConfig(
-            JwtAuthenticationFilter jwtAuthenticationFilter) {
+            JwtAuthenticationFilter jwtAuthenticationFilter,
+            OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.oAuth2LoginSuccessHandler = oAuth2LoginSuccessHandler;
     }
 
-    // CORS configuration for React frontend
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-
         CorsConfiguration configuration = new CorsConfiguration();
-
-        configuration.setAllowedOrigins(
-                List.of("http://localhost:5173")
-        );
-
-        configuration.setAllowedMethods(
-                List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
-        );
-
-        configuration.setAllowedHeaders(
-                List.of("Authorization", "Content-Type", "Accept")
-        );
-
+        configuration.setAllowedOrigins(List.of("http://localhost:5173"));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept"));
         configuration.setAllowCredentials(true);
-
-        UrlBasedCorsConfigurationSource source =
-                new UrlBasedCorsConfigurationSource();
-
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
-
         return source;
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(
-            HttpSecurity http) throws Exception {
-
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-            // Enable CORS
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-
-            // Disable CSRF for stateless REST API
             .csrf(csrf -> csrf.disable())
-
-            // Configure API authorization
             .authorizeHttpRequests(auth -> auth
-
-                // Public endpoints
                 .requestMatchers(
                     "/api/health",
                     "/api/auth/register",
-                    "/api/auth/login"
+                    "/api/auth/login",
+                    "/oauth2/**",      // <-- Allow OAuth redirects
+                    "/login/**"        // <-- Allow Google callback
                 ).permitAll()
-
-                // Admin-only endpoints
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
-
-                // All remaining endpoints require authentication
                 .anyRequest().authenticated()
             )
-
-            // Return 401 for unauthenticated requests
+            // Enable OAuth2 Login for Google
+            .oauth2Login(oauth2 -> oauth2
+                .successHandler(oAuth2LoginSuccessHandler)
+            )
             .exceptionHandling(exception -> exception
-                .authenticationEntryPoint(
-                    new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)
-                )
+                .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
             )
-
-            // Stateless session management
+            // IF_REQUIRED is necessary for OAuth2 redirects
             .sessionManagement(session -> session
-                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
             )
-
-            // Disable HTTP Basic
             .httpBasic(httpBasic -> httpBasic.disable())
-
-            // Disable default form login
             .formLogin(form -> form.disable())
-
-            // Add JWT authentication filter
-            .addFilterBefore(
-                jwtAuthenticationFilter,
-                UsernamePasswordAuthenticationFilter.class
-            );
+            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
